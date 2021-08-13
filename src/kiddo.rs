@@ -348,7 +348,7 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
             element: self,
         });
 
-        println!("pending binary heap size: {}", pending.len());
+        //println!("pending binary heap size: {}", pending.len());
 
         while !pending.is_empty() && (-pending.peek().unwrap().distance <= radius) {
             self.nearest_step(
