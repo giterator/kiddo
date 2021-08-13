@@ -334,14 +334,14 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
         point: &[A; K],
         radius: A,
         distance: &F,
-    ) -> Result<BinaryHeap<HeapElement<A, &T>>, ErrorKind>
+    ) -> Result<Vec<(A, &T)>, ErrorKind>//Result<BinaryHeap<HeapElement<A, &T>>, ErrorKind>
     where
         F: Fn(&[A; K], &[A; K]) -> A,
     {
         self.check_point(point)?;
 
         let mut pending = BinaryHeap::new();
-        let mut evaluated = BinaryHeap::<HeapElement<A, &T>>::new();
+        let mut evaluated = Vec::new();
 
         pending.push(HeapElement {
             distance: A::zero(),
@@ -351,7 +351,7 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
         //println!("pending binary heap size: {}", pending.len());
 
         while !pending.is_empty() && (-pending.peek().unwrap().distance <= radius) {
-            self.nearest_step(
+            self.nearest_step_mod(
                 point,
                 self.size,
                 radius,
@@ -441,7 +441,7 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
         }
 
         self.within_unsorted_impl(point, radius, distance)
-            .map(|evaluated| evaluated.into_vec().into_iter().map(Into::into).collect())
+            //.map(|evaluated| evaluated.into_vec().into_iter().map(Into::into).collect())
     }
 
     /// Queries the tree to find the best `n` elements within `radius` of `point`, using the specified
@@ -638,13 +638,55 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
                         if evaluated.len() < num {
                             evaluated.push(element);
                         } else {
-                            println!("else in nearest_step was triggerred");
+                            //println!("else in nearest_step was triggerred");
                             let mut top = evaluated.peek_mut().unwrap();
                             if element < *top {
                                 *top = element;
                             }
                         }
                     }
+                }
+            }
+            Node::Stem { .. } => unreachable!(),
+        }
+    }
+
+    fn nearest_step_mod<'b, F>(
+        &self,
+        point: &[A; K],
+        num: usize,
+        max_dist: A,
+        distance: &F,
+        pending: &mut BinaryHeap<HeapElement<A, &'b Self>>,
+        evaluated: &mut Vec<(A, &'b T)>,
+    ) where
+        F: Fn(&[A; K], &[A; K]) -> A,
+    {
+        let curr = &mut &*pending.pop().unwrap().element;
+        <KdTree<A, T, K>>::populate_pending(point, max_dist, distance, pending, curr);
+
+        match &curr.content {
+            Node::Leaf { points, bucket, .. } => {
+                let points = points.iter();
+                let bucket = bucket.iter();
+                let iter = points.zip(bucket).map(|(p, d)| (
+                    distance(point, p),
+                    d,
+                ));
+
+                for element in iter {
+                    evaluated.push((element.0, element.1));
+                    // if element <= max_dist {
+                    //     if evaluated.len() < num {
+                    //         evaluated.push(*element.element);
+                    //     } else {
+                    //         //println!("else in nearest_step was triggerred");
+                    //         let mut top = evaluated.peek_mut().unwrap();
+                    //         if element < *top {
+                    //             *top = element;
+                    //         }
+                    //     }
+                    // }
                 }
             }
             Node::Stem { .. } => unreachable!(),
@@ -717,6 +759,7 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
             }
         }
     }
+    
 
     /// Returns an iterator over all elements in the tree, sorted nearest-first to the query point.
     ///
