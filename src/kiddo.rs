@@ -328,6 +328,43 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
         Ok(evaluated)
     }
 
+    ////////////////////////////////////////////////////
+    fn within_unsorted_impl<F>(
+        &self,
+        point: &[A; K],
+        radius: A,
+        distance: &F,
+    ) -> Result<BinaryHeap<HeapElement<A, &T>>, ErrorKind>
+    where
+        F: Fn(&[A; K], &[A; K]) -> A,
+    {
+        self.check_point(point)?;
+
+        let mut pending = BinaryHeap::new();
+        let mut evaluated = BinaryHeap::<HeapElement<A, &T>>::new();
+
+        pending.push(HeapElement {
+            distance: A::zero(),
+            element: self,
+        });
+
+        println!("pending binary heap size: {}", pending.len());
+
+        while !pending.is_empty() && (-pending.peek().unwrap().distance <= radius) {
+            self.nearest_step(
+                point,
+                self.size,
+                radius,
+                distance,
+                &mut pending,
+                &mut evaluated,
+            );
+        }
+
+        Ok(evaluated)
+    }
+    ////////////////////////////////////////////////////////////
+    /// 
     /// Queries the tree to find all elements within `radius` of `point`, using the specified
     /// distance metric function. Results are returned sorted nearest-first
     ///
@@ -403,7 +440,7 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
             return Ok(vec![]);
         }
 
-        self.within_impl(point, radius, distance)
+        self.within_unsorted_impl(point, radius, distance)
             .map(|evaluated| evaluated.into_vec().into_iter().map(Into::into).collect())
     }
 
@@ -601,6 +638,7 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
                         if evaluated.len() < num {
                             evaluated.push(element);
                         } else {
+                            println!("else in nearest_step was triggerred");
                             let mut top = evaluated.peek_mut().unwrap();
                             if element < *top {
                                 *top = element;
