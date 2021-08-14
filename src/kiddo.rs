@@ -341,7 +341,7 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
         self.check_point(point)?;
 
         let mut pending = BinaryHeap::new();
-        let mut evaluated = Vec::new();
+        let mut evaluated = Vec::with_capacity(100);
 
         pending.push(HeapElement {
             distance: A::zero(),
@@ -675,8 +675,8 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
                 ));
 
                 for element in iter {
-                    evaluated.push((element.0, element.1));
-                    // if element <= max_dist {
+                    // evaluated.push((element.0, element.1));
+                    if element.0 <= max_dist {
                     //     if evaluated.len() < num {
                     //         evaluated.push(*element.element);
                     //     } else {
@@ -686,7 +686,8 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
                     //             *top = element;
                     //         }
                     //     }
-                    // }
+                        evaluated.push((element.0, element.1));
+                    }
                 }
             }
             Node::Stem { .. } => unreachable!(),
