@@ -331,14 +331,14 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
     ////////////////////////////////////////////////////
     fn within_unsorted_impl<F>(
         &self,
-        point: &[A; K],
+        point: &[A],
         radius: A,
         distance: &F,
     ) -> Result<Vec<(A, &T)>, ErrorKind>//Result<BinaryHeap<HeapElement<A, &T>>, ErrorKind>
     where
-        F: Fn(&[A; K], &[A; K]) -> A,
+        F: Fn(&[A], &[A]) -> A,
     {
-        self.check_point(point)?;
+        self.check_point_mod(point)?;
 
         let mut pending = BinaryHeap::new();
         let mut evaluated = Vec::with_capacity(100);
@@ -429,12 +429,12 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
     /// ```
     pub fn within_unsorted<F>(
         &self,
-        point: &[A; K],
+        point: &[A],
         radius: A,
         distance: &F,
     ) -> Result<Vec<(A, &T)>, ErrorKind>
     where
-        F: Fn(&[A; K], &[A; K]) -> A,
+        F: Fn(&[A], &[A]) -> A,
     {
         if self.size == 0 {
             return Ok(vec![]);
@@ -653,17 +653,17 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
 
     fn nearest_step_mod<'b, F>(
         &self,
-        point: &[A; K],
+        point: &[A],
         num: usize,
         max_dist: A,
         distance: &F,
         pending: &mut BinaryHeap<HeapElement<A, &'b Self>>,
         evaluated: &mut Vec<(A, &'b T)>,
     ) where
-        F: Fn(&[A; K], &[A; K]) -> A,
+        F: Fn(&[A], &[A]) -> A,
     {
         let curr = &mut &*pending.pop().unwrap().element;
-        <KdTree<A, T, K>>::populate_pending(point, max_dist, distance, pending, curr);
+        <KdTree<A, T, K>>::populate_pending_mod(point, max_dist, distance, pending, curr);
 
         match &curr.content {
             Node::Leaf { points, bucket, .. } => {
@@ -725,6 +725,39 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
                 }
             }
             Node::Stem { .. } => unreachable!(),
+        }
+    }
+
+    fn populate_pending_mod<'a, F>(
+        point: &[A],
+        max_dist: A,
+        distance: &F,
+        pending: &mut impl Stack<HeapElement<A, &'a Self>>,
+        curr: &mut &'a Self,
+    ) where
+        F: Fn(&[A], &[A]) -> A,
+    {
+        while let Node::Stem { left, right, .. } = &curr.content {
+            let candidate;
+            (candidate, *curr) = if curr.belongs_in_left_mod(point) {
+                (right, left)
+            } else {
+                (left, right)
+            };
+
+            let candidate_to_space = util::distance_to_space_mod(
+                point,
+                &candidate.min_bounds,
+                &candidate.max_bounds,
+                distance,
+            );
+
+            if candidate_to_space <= max_dist {
+                pending.stack_push(HeapElement {
+                    distance: candidate_to_space * -A::one(),
+                    element: &**candidate,
+                });
+            }
         }
     }
 
@@ -982,6 +1015,17 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
         }
     }
 
+    fn belongs_in_left_mod(&self, point: &[A]) -> bool {
+        match &self.content {
+            Node::Stem {
+                ref split_dimension,
+                ref split_value,
+                ..
+            } => point[*split_dimension as usize] < *split_value,
+            Node::Leaf { .. } => unreachable!(),
+        }
+    }
+
     fn extend(&mut self, point: &[A; K]) {
         let min = self.min_bounds.iter_mut();
         let max = self.max_bounds.iter_mut();
@@ -996,6 +1040,14 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
     }
 
     fn check_point(&self, point: &[A; K]) -> Result<(), ErrorKind> {
+        if point.iter().all(|n| n.is_finite()) {
+            Ok(())
+        } else {
+            Err(ErrorKind::NonFiniteCoordinate)
+        }
+    }
+
+    fn check_point_mod(&self, point: &[A]) -> Result<(), ErrorKind> {
         if point.iter().all(|n| n.is_finite()) {
             Ok(())
         } else {
