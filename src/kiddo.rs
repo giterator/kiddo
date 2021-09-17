@@ -780,7 +780,7 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
     {
         while let Node::Stem { left, right, .. } = &curr.content {
             let candidate;
-            (candidate, *curr) = if curr.belongs_in_left_mod(point) {
+            (candidate, *curr) = if curr.belongs_in_left(point) {
                 (right, left)
             } else {
                 (left, right)
