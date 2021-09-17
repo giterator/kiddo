@@ -196,14 +196,14 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
     /// ```
     pub fn nearest<F>(
         &self,
-        point: &[A; K],
+        point: &[A],
         num: usize,
         distance: &F,
     ) -> Result<Vec<(A, &T)>, ErrorKind>
     where
-        F: Fn(&[A; K], &[A; K]) -> A,
+        F: Fn(&[A], &[A]) -> A,
     {
-        self.check_point(point)?;
+        self.check_point_mod(point)?;
 
         let num = std::cmp::min(num, self.size);
         if num == 0 {
@@ -222,7 +222,7 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
             && (evaluated.len() < num
                 || (-pending.peek().unwrap().distance <= evaluated.peek().unwrap().distance))
         {
-            self.nearest_step(
+            self.nearest_step_no_dim(
                 point,
                 num,
                 A::infinity(),
@@ -623,6 +623,47 @@ impl<A: Float + Zero + One, T: std::cmp::PartialEq, const K: usize> KdTree<A, T,
     {
         let curr = &mut &*pending.pop().unwrap().element;
         <KdTree<A, T, K>>::populate_pending(point, max_dist, distance, pending, curr);
+
+        match &curr.content {
+            Node::Leaf { points, bucket, .. } => {
+                let points = points.iter();
+                let bucket = bucket.iter();
+                let iter = points.zip(bucket).map(|(p, d)| HeapElement {
+                    distance: distance(point, p),
+                    element: d,
+                });
+
+                for element in iter {
+                    if element <= max_dist {
+                        if evaluated.len() < num {
+                            evaluated.push(element);
+                        } else {
+                            //println!("else in nearest_step was triggerred");
+                            let mut top = evaluated.peek_mut().unwrap();
+                            if element < *top {
+                                *top = element;
+                            }
+                        }
+                    }
+                }
+            }
+            Node::Stem { .. } => unreachable!(),
+        }
+    }
+
+    fn nearest_step_no_dim<'b, F>(
+        &self,
+        point: &[A],
+        num: usize,
+        max_dist: A,
+        distance: &F,
+        pending: &mut BinaryHeap<HeapElement<A, &'b Self>>,
+        evaluated: &mut BinaryHeap<HeapElement<A, &'b T>>,
+    ) where
+        F: Fn(&[A], &[A]) -> A,
+    {
+        let curr = &mut &*pending.pop().unwrap().element;
+        <KdTree<A, T, K>>::populate_pending_mod(point, max_dist, distance, pending, curr);
 
         match &curr.content {
             Node::Leaf { points, bucket, .. } => {
